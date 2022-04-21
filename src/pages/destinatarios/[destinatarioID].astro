@@ -1,0 +1,58 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro'
+import { Markdown } from 'astro/components'
+import Airtable from 'airtable';
+export async function getStaticPaths() {
+  let apiKey = import.meta.env.AIRTABLE_API_KEY;  
+  let dbID = import.meta.env.AIRTABLE_DB_ID;
+  
+  let airtable = new Airtable({apiKey}).base(dbID);
+  let elements = await airtable('destinatario').select({
+    view: 'Grid view'
+  }).firstPage();
+  return await Promise.all(elements.map(async (record) => {
+    let destinatarioObject : any = {
+      params: { destinatarioID: record.id },
+      props: {        
+        ...record.fields
+      }
+    };
+    if(record.fields.destinatario instanceof Array) {
+      let destinatarioItems = await Promise.all(
+        record.fields.destinatario.map(async(destinatarioItem) => {
+          return airtable('destinatario').find(destinatarioItem);
+        })
+      );
+      destinatarioObject.props['destinatarios'] = destinatarioItems.map(destinatario => ({
+        params: { id: destinatario.id },
+        props: {
+          ...destinatario.fields
+        }
+      }))
+      delete destinatarioObject.props['destinatario'];
+    }
+    return destinatarioObject;
+  }));
+}
+// const {aid} = Astro.request.params;
+const destinatarioItem = Astro.props;
+---
+
+<BaseLayout title="Homepage">
+<h1>actividades extraescolares para {destinatarioItem.Name}</h1>
+<div class="list-of-destinatarios">
+
+  {destinatarioItem.destinatarios && destinatarioItem.destinatarios.map((item) => (
+    <div class="destinatario-preview">
+      <a href={`/destinatarios/${item.params.id}`}>
+        <div class="destinatario-picture">
+        <img src={item.props.Attachments[0].thumbnails.large.url} />
+        </div>
+      </a>
+      <div class="title">
+        {item.props.Name}
+      </div>
+    </div>
+  ))}
+</div>
+</BaseLayout>
